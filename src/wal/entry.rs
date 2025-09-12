@@ -2,6 +2,8 @@ use bytes::{Buf, BufMut, BytesMut};
 use crc32fast::Hasher;
 use std::fmt;
 
+use super::WalError;
+
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OpType {
@@ -29,11 +31,11 @@ impl OpType {
 
 #[derive(Debug, Clone)]
 pub struct WalEntry {
-    pub timestamp: u64,      // Unix nanos
+    pub timestamp: u64, // Unix nanos
     pub key: String,
-    pub value: Vec<u8>,      // empty for DEL
-    pub version: u64,        // for CAS/MVCC later
-    pub ttl: Option<u64>,    // Unix nanos or 0 for none
+    pub value: Vec<u8>,   // empty for DEL
+    pub version: u64,     // for CAS/MVCC later
+    pub ttl: Option<u64>, // Unix nanos or 0 for none
     pub op_type: OpType,
 }
 
@@ -64,8 +66,9 @@ impl WalEntry {
         buf.to_vec()
     }
 
-    pub fn deserialize( &[u8]) -> Result<(Self, usize), WalError> {
-        if data.len() < 37 { // min header + checksum
+    pub fn deserialize(data: &[u8]) -> Result<(Self, usize), WalError> {
+        if data.len() < 37 {
+            // min header + checksum
             return Err(WalError::InvalidEntry {
                 offset: 0,
                 reason: "too short".to_string(),
@@ -160,7 +163,7 @@ fn read_u32(data: &[u8], offset: &mut usize) -> Result<u32, WalError> {
     Ok(val)
 }
 
-fn read_u8( &[u8], offset: &mut usize) -> Result<u8, WalError> {
+fn read_u8(data: &[u8], offset: &mut usize) -> Result<u8, WalError> {
     if *offset >= data.len() {
         return Err(WalError::InvalidEntry {
             offset: *offset as u64,

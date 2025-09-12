@@ -1,10 +1,10 @@
+use crate::auth::audit::AuditLogger;
+use crate::auth::jwt::JwtManager;
+use crate::auth::AuthError;
+use crate::catalog::CatalogManager;
 use std::collections::HashSet;
 use std::net::IpAddr;
 use std::sync::Arc;
-
-use crate::auth::audit::AuditLogger;
-use crate::auth::jwt::JwtManager;
-use crate::catalog::CatalogManager;
 
 pub struct AuthManager {
     catalog: Arc<CatalogManager>,
@@ -13,7 +13,11 @@ pub struct AuthManager {
 }
 
 impl AuthManager {
-    pub fn new(catalog: Arc<CatalogManager>, jwt_secret: String, audit_log_path: String) -> Result<Self, std::io::Error> {
+    pub fn new(
+        catalog: Arc<CatalogManager>,
+        jwt_secret: String,
+        audit_log_path: String,
+    ) -> Result<Self, std::io::Error> {
         let jwt_manager = JwtManager::new(jwt_secret);
         let audit_logger = AuditLogger::new(&audit_log_path)?;
 
@@ -47,35 +51,45 @@ impl AuthManager {
                 };
 
                 // Log success
-                self.audit_logger.log(crate::auth::audit::AuditEvent {
-                    timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-                    event: "login_success".to_string(),
-                    user: Some(user),
-                    source_ip: source_ip.to_string(),
-                    auth_method: "api_key".to_string(),
-                    key_id: Some(key_id.to_string()),
-                    op: None,
-                    key: None,
-                    success: true,
-                    details: None,
-                }).ok(); // best effort
+                self.audit_logger
+                    .log(crate::auth::audit::AuditEvent {
+                        timestamp: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                        event: "login_success".to_string(),
+                        user: Some(user),
+                        source_ip: source_ip.to_string(),
+                        auth_method: "api_key".to_string(),
+                        key_id: Some(key_id.to_string()),
+                        op: None,
+                        key: None,
+                        success: true,
+                        details: None,
+                    })
+                    .ok(); // best effort
 
                 Ok(ctx)
             }
             Err(e) => {
                 // Log failure
-                self.audit_logger.log(crate::auth::audit::AuditEvent {
-                    timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-                    event: "login_failed".to_string(),
-                    user: None,
-                    source_ip: source_ip.to_string(),
-                    auth_method: "api_key".to_string(),
-                    key_id: Some(key_id.to_string()),
-                    op: None,
-                    key: None,
-                    success: false,
-                    details: Some(e.to_string()),
-                }).ok();
+                self.audit_logger
+                    .log(crate::auth::audit::AuditEvent {
+                        timestamp: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                        event: "login_failed".to_string(),
+                        user: None,
+                        source_ip: source_ip.to_string(),
+                        auth_method: "api_key".to_string(),
+                        key_id: Some(key_id.to_string()),
+                        op: None,
+                        key: None,
+                        success: false,
+                        details: Some(e.to_string()),
+                    })
+                    .ok();
 
                 Err(e)
             }
@@ -101,34 +115,44 @@ impl AuthManager {
                     session_id: claims.session_id,
                 };
 
-                self.audit_logger.log(crate::auth::audit::AuditEvent {
-                    timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-                    event: "login_success".to_string(),
-                    user: Some(claims.sub),
-                    source_ip: source_ip.to_string(),
-                    auth_method: "jwt".to_string(),
-                    key_id: None,
-                    op: None,
-                    key: None,
-                    success: true,
-                    details: None,
-                }).ok();
+                self.audit_logger
+                    .log(crate::auth::audit::AuditEvent {
+                        timestamp: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                        event: "login_success".to_string(),
+                        user: Some(claims.sub),
+                        source_ip: source_ip.to_string(),
+                        auth_method: "jwt".to_string(),
+                        key_id: None,
+                        op: None,
+                        key: None,
+                        success: true,
+                        details: None,
+                    })
+                    .ok();
 
                 Ok(ctx)
             }
             Err(e) => {
-                self.audit_logger.log(crate::auth::audit::AuditEvent {
-                    timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-                    event: "login_failed".to_string(),
-                    user: None,
-                    source_ip: source_ip.to_string(),
-                    auth_method: "jwt".to_string(),
-                    key_id: None,
-                    op: None,
-                    key: None,
-                    success: false,
-                    details: Some(e.to_string()),
-                }).ok();
+                self.audit_logger
+                    .log(crate::auth::audit::AuditEvent {
+                        timestamp: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                        event: "login_failed".to_string(),
+                        user: None,
+                        source_ip: source_ip.to_string(),
+                        auth_method: "jwt".to_string(),
+                        key_id: None,
+                        op: None,
+                        key: None,
+                        success: false,
+                        details: Some(e.to_string()),
+                    })
+                    .ok();
 
                 Err(crate::auth::types::AuthError::InvalidCredentials)
             }
@@ -152,24 +176,32 @@ impl AuthManager {
             Ok(())
         } else {
             // Log denial
-            self.audit_logger.log(crate::auth::audit::AuditEvent {
-                timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
-                event: "permission_denied".to_string(),
-                user: Some(ctx.user.clone()),
-                source_ip: ctx.source_ip.to_string(),
-                auth_method: match &ctx.auth_method {
-                    crate::auth::types::AuthMethod::ApiKey(_) => "api_key".to_string(),
-                    crate::auth::types::AuthMethod::Jwt(_) => "jwt".to_string(),
-                    crate::auth::types::AuthMethod::Password => "password".to_string(),
-                },
-                key_id: None,
-                op: Some(op.to_string()),
-                key: Some(key.to_string()),
-                success: false,
-                details: Some(format!("required permission: {}", op)),
-            }).ok();
+            self.audit_logger
+                .log(crate::auth::audit::AuditEvent {
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                    event: "permission_denied".to_string(),
+                    user: Some(ctx.user.clone()),
+                    source_ip: ctx.source_ip.to_string(),
+                    auth_method: match &ctx.auth_method {
+                        crate::auth::types::AuthMethod::ApiKey(_) => "api_key".to_string(),
+                        crate::auth::types::AuthMethod::Jwt(_) => "jwt".to_string(),
+                        crate::auth::types::AuthMethod::Password => "password".to_string(),
+                    },
+                    key_id: None,
+                    op: Some(op.to_string()),
+                    key: Some(key.to_string()),
+                    success: false,
+                    details: Some(format!("required permission: {}", op)),
+                })
+                .ok();
 
-            Err(crate::auth::types::AuthError::PermissionDenied(op.to_string(), ctx.user.clone()))
+            Err(crate::auth::types::AuthError::PermissionDenied(
+                op.to_string(),
+                ctx.user.clone(),
+            ))
         }
     }
 }
@@ -177,7 +209,8 @@ impl AuthManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::StorageConfig;
+    use crate::catalog::bootstrap::bootstrap_if_needed;
+    use crate::storage::{StorageConfig, StorageEngine};
     use std::net::IpAddr;
 
     #[tokio::test]

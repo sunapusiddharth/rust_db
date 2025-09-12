@@ -1,7 +1,7 @@
 use tonic::transport::Channel;
 
 pub struct KvStoreClient {
-    inner: kvstore::kv_store_client::KvStoreClient<Channel>,
+    inner: KvStoreClient<Channel>,
 }
 
 impl KvStoreClient {
@@ -12,20 +12,25 @@ impl KvStoreClient {
             .await?;
 
         Ok(Self {
-            inner: kvstore::kv_store_client::KvStoreClient::new(channel),
+            inner: KvStoreClient::new(channel),
         })
     }
 
-    pub async fn get(&mut self, key: &str) -> Result<kvstore::GetResponse, tonic::Status> {
-        let request = tonic::Request::new(kvstore::GetRequest {
+    pub async fn get(&mut self, key: &str) -> Result<GetResponse, tonic::Status> {
+        let request = tonic::Request::new(GetRequest {
             key: key.to_string(),
         });
         let response = self.inner.get(request).await?;
         Ok(response.into_inner())
     }
 
-    pub async fn set(&mut self, key: &str, value: Vec<u8>, ttl_seconds: u64) -> Result<kvstore::SetResponse, tonic::Status> {
-        let request = tonic::Request::new(kvstore::SetRequest {
+    pub async fn set(
+        &mut self,
+        key: &str,
+        value: Vec<u8>,
+        ttl_seconds: u64,
+    ) -> Result<SetResponse, tonic::Status> {
+        let request = tonic::Request::new(SetRequest {
             key: key.to_string(),
             value,
             ttl_seconds,
@@ -34,8 +39,8 @@ impl KvStoreClient {
         Ok(response.into_inner())
     }
 
-    pub async fn delete(&mut self, key: &str) -> Result<kvstore::DeleteResponse, tonic::Status> {
-        let request = tonic::Request::new(kvstore::DeleteRequest {
+    pub async fn delete(&mut self, key: &str) -> Result<DeleteResponse, tonic::Status> {
+        let request = tonic::Request::new(DeleteRequest {
             key: key.to_string(),
         });
         let response = self.inner.delete(request).await?;

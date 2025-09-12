@@ -3,11 +3,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::storage::StorageEngine;
+use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::{Client, Config};
 use tokio::sync::oneshot;
 use tokio::time::sleep;
 
-use crate::storage::StorageEngine;
+use super::types::WorkerError;
 
 pub struct S3Uploader {
     engine: Arc<StorageEngine>,
@@ -123,7 +125,7 @@ async fn upload_snapshot(
     filename: &str,
 ) -> Result<(), aws_sdk_s3::Error> {
     let path = PathBuf::from(snapshot_dir).join(filename);
-    let body = aws_sdk_s3::types::ByteStream::from_path(&path).await?;
+    let body = ByteStream::from_path(&path).await?;
 
     client
         .put_object()

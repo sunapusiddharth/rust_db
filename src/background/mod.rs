@@ -1,13 +1,14 @@
 pub mod checkpoint;
 pub mod metrics;
+pub mod replica;
 pub mod s3_uploader;
 pub mod types;
-pub mod replica;
 
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
+use crate::config;
 use crate::storage::StorageEngine;
 use crate::wal::WalManager;
 
@@ -42,11 +43,8 @@ impl WorkerManager {
         manager.checkpoint = Some(checkpoint_worker);
 
         // Start metrics worker
-        let mut metrics_worker = metrics::MetricsWorker::new(
-            engine.clone(),
-            wal.clone(),
-            config.metrics_interval_ms,
-        );
+        let mut metrics_worker =
+            metrics::MetricsWorker::new(engine.clone(), wal.clone(), config.metrics_interval_ms);
         let _metrics_handle = metrics_worker.start().await?;
         manager.metrics = Some(metrics_worker);
 
@@ -78,7 +76,8 @@ impl WorkerManager {
         if let Some(worker) = &mut self.s3_uploader {
             worker.shutdown();
         }
-        if let Some(worker) = &mut self.replica {  // ← ADDED
+        if let Some(worker) = &mut self.replica {
+            // ← ADDED
             worker.shutdown();
         }
     }

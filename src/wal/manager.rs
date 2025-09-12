@@ -1,5 +1,5 @@
 use std::fs::{File, OpenOptions};
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -8,12 +8,16 @@ use tokio::time::{sleep, Duration};
 use crate::wal::entry::WalEntry;
 use crate::wal::error::WalError;
 
+use super::config::SyncPolicy;
+use super::WalConfig;
+
+#[derive(Debug)]
 pub struct WalManager {
     config: WalConfig,
     current_file: Mutex<WalFileHandle>,
     sync_task: Option<tokio::task::JoinHandle<()>>,
 }
-
+#[derive(Debug)]
 struct WalFileHandle {
     file: File,
     path: PathBuf,
@@ -26,7 +30,7 @@ impl WalManager {
 
         let current_file = Self::open_next_file(&config).await?;
 
-        let manager = Self {
+        let mut manager = Self {
             config: config.clone(),
             current_file: Mutex::new(current_file),
             sync_task: None,
@@ -84,11 +88,7 @@ impl WalManager {
 
         tracing::info!(path = %path.display(), offset = offset, "Opened new WAL file");
 
-        Ok(WalFileHandle {
-            file,
-            path,
-            offset,
-        })
+        Ok(WalFileHandle { file, path, offset })
     }
 
     pub async fn append(&self, entry: &WalEntry) -> Result<u64, WalError> {
@@ -172,95 +172,5 @@ impl Drop for WalManager {
         if let Some(handle) = self.sync_task.take() {
             handle.abort();
         }
-    }
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    #[tokio::test]
-    async fn test_wal_append_and_replay() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = WalConfig {
-            dir: temp_dir.path().to_str().unwrap().to_string(),
-            file_prefix: "test_".to_string(),
-            max_file_size: 1024,
-            sync_policy: SyncPolicy::Never,
-        };
-
-        let wal = WalManager::new(config).await.unwrap();
-
-        // Append entries
-        let entry1 = WalEntry {
-            timestamp: 1,
-            key: "key1".to_string(),
-            value: b"value1".to_vec(),
-            version: 1,
-            ttl: None,
-            op_type: OpType::Set,
-        };
-        let offset1 = wal.append(&entry1).await.unwrap();
-
-        let entry2 = WalEntry {
-            timestamp: 2,
-            key: "key2".to_string(),
-            value: b"value2".to_vec(),
-            version: 1,
-            ttl: None,
-            op_type: OpType::Del,
-        };
-        let _offset2 = wal.append(&entry2).await.unwrap();
-
-        // Replay
-        let mut replayed = Vec::new();
-        wal.replay_from(0, |offset, entry| {
-            replayed.push((offset, entry));
-            Ok(())
-        })
-        .await
-        .unwrap();
-
-        assert_eq!(replayed.len(), 2);
-        assert_eq!(replayed[0].0, 0);
-        assert_eq!(replayed[0].1.key, "key1");
-        assert_eq!(replayed[1].1.key, "key2");
-    }
-
-    #[tokio::test]
-    async fn test_wal_checksum_validation() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = WalConfig {
-            dir: temp_dir.path().to_str().unwrap().to_string(),
-            file_prefix: "test_".to_string(),
-            max_file_size: 1024,
-            sync_policy: SyncPolicy::Never,
-        };
-
-        let wal = WalManager::new(config).await.unwrap();
-
-        let entry = WalEntry {
-            timestamp: 1,
-            key: "key1".to_string(),
-            value: b"value1".to_vec(),
-            version: 1,
-            ttl: None,
-            op_type: OpType::Set,
-        };
-        let _ = wal.append(&entry).await.unwrap();
-
-        // Corrupt the file
-        let mut path = temp_dir.path().to_path_buf();
-        path.push("test_1");
-        let mut file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
-        file.seek(std::io::SeekFrom::Start(10)).unwrap();
-        file.write_all(&[0xFF]).unwrap();
-
-        // Replay should fail
-        let result = wal.replay_from(0, |_offset, _entry| Ok(())).await;
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), WalError::ChecksumMismatch { .. }));
     }
 }

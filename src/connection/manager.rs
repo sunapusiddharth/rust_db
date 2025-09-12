@@ -7,8 +7,10 @@ use dashmap::DashMap;
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
-use crate::connection::types::{CloseReason, ConnectionInfo};
 use crate::connection::metrics;
+use crate::connection::types::{CloseReason, ConnectionInfo};
+
+use super::config::ConnectionConfig;
 
 type ConnectionMap = DashMap<uuid::Uuid, Arc<ConnectionInfo>>;
 
@@ -26,11 +28,16 @@ impl ConnectionManager {
         }
     }
 
-    pub async fn accept(&self, addr: std::net::SocketAddr, is_websocket: bool) -> Result<ConnectionGuard, ConnectionError> {
+    pub async fn accept(
+        &self,
+        addr: std::net::SocketAddr,
+        is_websocket: bool,
+    ) -> Result<ConnectionGuard, ConnectionError> {
         // Check global limit
         if self.connections.len() >= self.config.max_connections {
             if let Some(to_evict) = self.find_connection_to_evict().await {
-                self.close_connection(to_evict, CloseReason::MaxConnectionsReached).await;
+                self.close_connection(to_evict, CloseReason::MaxConnectionsReached)
+                    .await;
             } else {
                 return Err(ConnectionError::MaxConnectionsExceeded);
             }
@@ -51,7 +58,13 @@ impl ConnectionManager {
         })
     }
 
-    pub async fn authenticate(&self, conn_id: uuid::Uuid, user: String, role: String, priority: u8) -> Result<(), ConnectionError> {
+    pub async fn authenticate(
+        &self,
+        conn_id: uuid::Uuid,
+        user: String,
+        role: String,
+        priority: u8,
+    ) -> Result<(), ConnectionError> {
         if let Some(conn) = self.connections.get(&conn_id) {
             let mut conn_mut = (*conn).clone();
             conn_mut.set_user(user.clone(), role.clone(), priority);
@@ -162,7 +175,9 @@ impl Drop for ConnectionGuard {
         let manager = self.manager.clone();
         let id = self.id;
         tokio::spawn(async move {
-            manager.close_connection(id, CloseReason::ClientClosed).await;
+            manager
+                .close_connection(id, CloseReason::ClientClosed)
+                .await;
         });
     }
 }
@@ -174,7 +189,6 @@ pub enum ConnectionError {
     #[error("Connection not found")]
     NotFound,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -213,7 +227,9 @@ mod tests {
             .unwrap();
 
         // Try to add third connection
-        let result = manager.accept("127.0.0.1:8083".parse().unwrap(), false).await;
+        let result = manager
+            .accept("127.0.0.1:8083".parse().unwrap(), false)
+            .await;
 
         // Should evict the reader (lower priority)
         assert!(result.is_ok());

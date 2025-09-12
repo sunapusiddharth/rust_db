@@ -1,8 +1,10 @@
 use serde::Deserialize;
 
+use crate::storage::StorageConfig;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
-    pub storage: crate::storage::types::StorageConfig,
+    pub storage: StorageConfig,
     pub wal: crate::wal::config::WalConfig,
     pub background: BackgroundConfig,
 }

@@ -7,6 +7,8 @@ use tokio::time::sleep;
 use crate::storage::StorageEngine;
 use crate::wal::WalManager;
 
+use super::types::WorkerError;
+
 pub struct CheckpointWorker {
     engine: Arc<StorageEngine>,
     wal: Arc<WalManager>,

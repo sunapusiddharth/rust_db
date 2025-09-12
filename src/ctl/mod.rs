@@ -4,6 +4,9 @@ pub mod types;
 
 use clap::{Parser, Subcommand};
 
+use self::commands::snapshot::SnapshotCommand;
+use self::commands::user::UserCommand;
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct KvCtl {
@@ -24,10 +27,10 @@ pub enum Commands {
     Wal(commands::wal::WalArgs),
 
     /// Manage snapshots
-    Snapshot(commands::snapshot::SnapshotCommand),
+    Snapshot(SnapshotCommand),
 
     /// Manage users
-    User(commands::user::UserCommand),
+    User(UserCommand),
 }
 
 impl KvCtl {

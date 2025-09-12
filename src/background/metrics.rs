@@ -8,6 +8,8 @@ use tokio::time::sleep;
 use crate::storage::StorageEngine;
 use crate::wal::WalManager;
 
+use super::types::WorkerError;
+
 lazy_static::lazy_static! {
     static ref WAL_SIZE: IntGauge = register_int_gauge!(
         "kvstore_wal_size_bytes",

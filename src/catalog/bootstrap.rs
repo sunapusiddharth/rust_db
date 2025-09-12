@@ -1,9 +1,11 @@
-use crate::catalog::types::{AuthSettings, AuditSettings, Grant, Role, User};
-use crate::storage::StorageEngine;
+use crate::catalog::types::{AuditSettings, AuthSettings, Grant, Role, User};
 use crate::storage::types::KvEntry;
+use crate::storage::StorageEngine;
 use chrono::Utc;
 
-pub async fn bootstrap_if_needed(engine: &StorageEngine) -> Result<bool, crate::catalog::error::CatalogError> {
+pub async fn bootstrap_if_needed(
+    engine: &StorageEngine,
+) -> Result<bool, crate::catalog::error::CatalogError> {
     // Check if already bootstrapped
     if engine.exists("_sys.settings:auth").await {
         return Ok(false); // already bootstrapped
@@ -14,8 +16,21 @@ pub async fn bootstrap_if_needed(engine: &StorageEngine) -> Result<bool, crate::
     // Create default roles
     let roles = [
         Role::new(1, "admin".to_string(), vec!["*".to_string()]), // "*" = all permissions
-        Role::new(2, "reader".to_string(), vec!["GET".to_string(), "SCAN".to_string(), "EXISTS".to_string()]),
-        Role::new(3, "writer".to_string(), vec!["SET".to_string(), "DEL".to_string(), "INCR".to_string(), "APPEND".to_string()]),
+        Role::new(
+            2,
+            "reader".to_string(),
+            vec!["GET".to_string(), "SCAN".to_string(), "EXISTS".to_string()],
+        ),
+        Role::new(
+            3,
+            "writer".to_string(),
+            vec![
+                "SET".to_string(),
+                "DEL".to_string(),
+                "INCR".to_string(),
+                "APPEND".to_string(),
+            ],
+        ),
     ];
 
     for role in &roles {
@@ -34,7 +49,11 @@ pub async fn bootstrap_if_needed(engine: &StorageEngine) -> Result<bool, crate::
     engine.set(&user_key, user_entry.value, None).await?;
 
     // Grant admin user → admin role
-    let grant = Grant::new("admin".to_string(), vec!["admin".to_string()], "system".to_string());
+    let grant = Grant::new(
+        "admin".to_string(),
+        vec!["admin".to_string()],
+        "system".to_string(),
+    );
     let grant_key = "_sys.grants:admin".to_string();
     let grant_value = serde_json::to_vec(&grant)?;
     let grant_entry = KvEntry::new(grant_value, None);
@@ -58,7 +77,7 @@ pub async fn bootstrap_if_needed(engine: &StorageEngine) -> Result<bool, crate::
     Ok(true)
 }
 
-fn hash_password(password: &str) -> Result<String, crate::catalog::error::CatalogError> {
+pub fn hash_password(password: &str) -> Result<String, crate::catalog::error::CatalogError> {
     use scrypt::password_hash::PasswordHasher;
     use scrypt::{password_hash::SaltString, Scrypt};
 

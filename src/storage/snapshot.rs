@@ -14,7 +14,10 @@ impl SnapshotManager {
         Self { snapshot_dir }
     }
 
-    pub async fn create_snapshot(&self, engine: &StorageEngine) -> Result<String, crate::storage::error::StorageError> {
+    pub async fn create_snapshot(
+        &self,
+        engine: &StorageEngine,
+    ) -> Result<String, crate::storage::error::StorageError> {
         use tokio::task;
 
         let now = std::time::SystemTime::now()
@@ -27,11 +30,10 @@ impl SnapshotManager {
 
         // Serialize entire state
         let state = engine.snapshot().await;
-        let serialized = task::spawn_blocking(move || bincode::serialize(&state))
-            .await??;
+        let serialized = task::spawn_blocking(move || bincode::serialize(&state)).await?;
 
         // Write to file
-        let file = OpenOptions::new()
+        let mut file = OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
@@ -39,25 +41,31 @@ impl SnapshotManager {
 
         task::spawn_blocking(move || {
             std::io::Write::write_all(&file, &serialized)?;
-            std::io::Write::flush(&file)?;
+            std::io::Write::flush(file)?;
             Result::<(), std::io::Error>::Ok(())
         })
-        .await??;
+        .await?;
 
         tracing::info!(path = %path.display(), "Snapshot created");
 
         Ok(filename)
     }
 
-    pub async fn load_snapshot(&self, engine: &StorageEngine, filename: &str) -> Result<(), crate::storage::error::StorageError> {
+    pub async fn load_snapshot(
+        &self,
+        engine: &StorageEngine,
+        filename: &str,
+    ) -> Result<(), crate::storage::error::StorageError> {
         use tokio::task;
 
         let path = Path::new(&self.snapshot_dir).join(filename);
         if !path.exists() {
-            return Err(crate::storage::error::StorageError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("Snapshot not found: {}", filename),
-            )));
+            return Err(crate::storage::error::StorageError::Io(
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Snapshot not found: {}", filename),
+                ),
+            ));
         }
 
         let file = File::open(&path)?;
@@ -67,12 +75,13 @@ impl SnapshotManager {
             std::io::Read::read_to_end(&file, &mut buffer)?;
             Result::<(), std::io::Error>::Ok(())
         })
-        .await??;
+        .await?;
 
-        let state: Vec<std::collections::HashMap<String, KvEntry>> = task::spawn_blocking(move || {
-            bincode::deserialize(&buffer).map_err(|e| Box::new(e) as Box<bincode::ErrorKind>)
-        })
-        .await??;
+        let state: Vec<std::collections::HashMap<String, KvEntry>> =
+            task::spawn_blocking(move || {
+                bincode::deserialize(&buffer).map_err(|e| Box::new(e) as Box<bincode::ErrorKind>)
+            })
+            .await?;
 
         // Load into engine
         engine.load_from_snapshot(state).await;
