@@ -1,0 +1,45 @@
+[Unit]
+Description=KVStore++ - High-performance, durable key-value store
+Documentation=https://github.com/yourorg/kvstore-plus-plus
+After=network.target
+Requires=network-online.target
+
+[Service]
+# 👇 REPLACE with actual path to your binary
+ExecStart=/usr/local/bin/kvstore-plus-plus
+
+# 👇 REPLACE with actual path to config
+Environment=CONFIG_FILE=/etc/kvstore-plus-plus/config.toml
+
+# Working directory (where data/wal/snapshots will be created if relative paths)
+WorkingDirectory=/var/lib/kvstore-plus-plus
+
+# User/Group (recommended: don't run as root)
+User=kvstore
+Group=kvstore
+
+# Restart policy
+Restart=always
+RestartSec=5
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=8192
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kvstore-plus-plus
+
+# Security hardening (optional but recommended)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+[storage]
+num_shards = 256
+snapshot_dir = "data/snapshots"
+
+[wal]
+dir = "data/wal"
+file_prefix = "wal_"
+max_file_size = 134217728 # 128 MB
+sync_policy = { EveryMs = 100 }
+
+[background]
+checkpoint_interval_sec = 300
+metrics_interval_ms = 1000
+
+[background.s3]
+bucket = "my-kv-backups"
+region = "us-east-1"
+upload_after_snapshot = true

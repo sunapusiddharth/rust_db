@@ -1,0 +1,36 @@
+[storage]
+num_shards = 256
+snapshot_dir = "data/snapshots"
+
+[wal]
+dir = "data/wal"
+file_prefix = "wal_"
+max_file_size = 134217728 # 128 MB
+sync_policy = { EveryMs = 100 }
+
+[background]
+checkpoint_interval_sec = 300
+metrics_interval_ms = 1000
+
+[background.s3]
+bucket = "prod-kv-backups"
+region = "us-east-1"
+upload_after_snapshot = true
+
+[connection]
+max_connections = 10000
+idle_timeout_sec = 300
+evict_policy = "idle_then_priority"
+
+[role.admin]
+max_connections = 100
+idle_timeout_sec = 3600
+
+[role.reader]
+max_connections = 5000
+idle_timeout_sec = 60
+
+[background.replica]
+enabled = true
+bind_addr = "127.0.0.1:9093"
+sync_mode = false
