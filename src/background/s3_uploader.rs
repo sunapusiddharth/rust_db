@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::storage::StorageEngine;
+use aws_sdk_s3::config::Region;
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::{Client, Config};
 use tokio::sync::oneshot;
@@ -15,7 +16,7 @@ pub struct S3Uploader {
     engine: Arc<StorageEngine>,
     snapshot_dir: String,
     bucket: String,
-    client: Client,
+    client: Arc<Client>,
     upload_after_snapshot: bool,
     shutdown_tx: Option<oneshot::Sender<()>>,
 }
@@ -31,14 +32,14 @@ impl S3Uploader {
     ) -> Result<Self, WorkerError> {
         let config = if let Some(endpoint) = endpoint {
             Config::builder()
-                .region(aws_sdk_s3::config::Region::new(region))
+                .region(Region::new(region))
                 .endpoint_url(endpoint)
                 .build()
         } else {
             aws_config::load_from_env().await.into()
         };
 
-        let client = Client::from_conf(config);
+        let client = Arc::new(Client::from_conf(config));
 
         Ok(Self {
             engine,
@@ -65,17 +66,23 @@ impl S3Uploader {
             loop {
                 tokio::select! {
                     _ = sleep(Duration::from_secs(10)) => {
-                        // List snapshots
-                        match fs::read_dir(&snapshot_dir) {
-                            Ok(entries) => {
-                                let mut snapshots: Vec<_> = entries
-                                    .filter_map(|e| e.ok())
-                                    .map(|e| e.path())
-                                    .filter(|p| p.extension().map_or(false, |ext| ext == "bin"))
-                                    .collect();
+                        let snapshots = tokio::task::spawn_blocking({
+                            let snapshot_dir = snapshot_dir.clone();
+                            move || {
+                                fs::read_dir(&snapshot_dir)
+                                    .map(|entries| {
+                                        entries
+                                            .filter_map(|e| e.ok())
+                                            .map(|e| e.path())
+                                            .filter(|p| p.extension().map_or(false, |ext| ext == "bin"))
+                                            .collect::<Vec<_>>()
+                                    })
+                            }
+                        }).await;
 
-                                snapshots.sort(); // by name (which includes timestamp)
-
+                        match snapshots {
+                            Ok(Ok(mut snapshots)) => {
+                                snapshots.sort();
                                 if let Some(latest) = snapshots.last() {
                                     let filename = latest.file_name().unwrap().to_string_lossy().to_string();
                                     if filename != last_snapshot {
@@ -88,14 +95,14 @@ impl S3Uploader {
                                                     tracing::info!(filename = %filename, "Snapshot uploaded to S3");
                                                 }
                                                 Err(e) => {
-                                                    tracing::error!(filename = %filename, error = %e, "Failed to upload snapshot");
+                                                    tracing::error!(filename = %filename, error = %e.to_string(), "Failed to upload snapshot");
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
-                            Err(e) => {
+                            Ok(Err(e)) | Err(e) => {
                                 tracing::error!("Failed to read snapshot dir: {}", e);
                             }
                         }
@@ -125,7 +132,9 @@ async fn upload_snapshot(
     filename: &str,
 ) -> Result<(), aws_sdk_s3::Error> {
     let path = PathBuf::from(snapshot_dir).join(filename);
-    let body = ByteStream::from_path(&path).await?;
+    let body = ByteStream::from_path(&path)
+        .await
+        .map_err(|e| aws_sdk_s3::Error::Unhandled(Box::new(e)))?;
 
     client
         .put_object()

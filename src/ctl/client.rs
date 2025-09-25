@@ -1,5 +1,6 @@
 use tonic::transport::Channel;
 
+use super::types::{DeleteResponse, GetResponse, SetResponse};
 pub struct KvStoreClient {
     inner: KvStoreClient<Channel>,
 }

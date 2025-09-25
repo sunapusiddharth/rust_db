@@ -44,7 +44,7 @@ impl CheckpointWorker {
 
         let handle = tokio::spawn(async move {
             let snapshot_manager = crate::storage::snapshot::SnapshotManager::new(snapshot_dir);
-
+            tokio::pin!(rx); // Pin the receiver so it can be polled multiple times
             loop {
                 tokio::select! {
                     _ = sleep(interval) => {
@@ -69,7 +69,7 @@ impl CheckpointWorker {
                             }
                         }
                     }
-                    _ = rx => {
+                    _ = &mut rx => {
                         tracing::info!("Checkpoint worker shutting down");
                         break;
                     }

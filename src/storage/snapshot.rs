@@ -3,7 +3,8 @@ use std::path::Path;
 
 use crate::storage::engine::StorageEngine;
 use crate::storage::types::KvEntry;
-
+use std::io::Read;
+use std::io::Write;
 pub struct SnapshotManager {
     snapshot_dir: String,
 }
@@ -30,21 +31,36 @@ impl SnapshotManager {
 
         // Serialize entire state
         let state = engine.snapshot().await;
-        let serialized = task::spawn_blocking(move || bincode::serialize(&state)).await?;
+        let serialized = task::spawn_blocking(move || bincode::serialize(&state))
+            .await
+            .map_err(|e| {
+                crate::storage::error::StorageError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e,
+                ))
+            })?
+            .map_err(|e| crate::storage::error::StorageError::Serialization(e))?;
 
         // Write to file
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&path)?;
-
+        let path_clone = path.clone();
         task::spawn_blocking(move || {
-            std::io::Write::write_all(&file, &serialized)?;
-            std::io::Write::flush(file)?;
-            Result::<(), std::io::Error>::Ok(())
+            let mut file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&path_clone)?;
+
+            file.write_all(&serialized)?;
+            file.flush()?;
+            Ok::<(), std::io::Error>(())
         })
-        .await?;
+        .await
+        .map_err(|e| {
+            crate::storage::error::StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e,
+            ))
+        })??;
 
         tracing::info!(path = %path.display(), "Snapshot created");
 
@@ -68,22 +84,32 @@ impl SnapshotManager {
             ));
         }
 
-        let file = File::open(&path)?;
-        let metadata = file.metadata()?;
-        let mut buffer = Vec::with_capacity(metadata.len() as usize);
-        task::spawn_blocking(move || {
-            std::io::Read::read_to_end(&file, &mut buffer)?;
-            Result::<(), std::io::Error>::Ok(())
+        let path_clone = path.clone();
+        let buffer = task::spawn_blocking(move || {
+            let mut file = File::open(&path_clone)?;
+            let mut buffer = Vec::new();
+            file.read_to_end(&mut buffer)?;
+            Ok::<Vec<u8>, std::io::Error>(buffer)
         })
-        .await?;
+        .await
+        .map_err(|e| {
+            crate::storage::error::StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e,
+            ))
+        })??;
 
         let state: Vec<std::collections::HashMap<String, KvEntry>> =
-            task::spawn_blocking(move || {
-                bincode::deserialize(&buffer).map_err(|e| Box::new(e) as Box<bincode::ErrorKind>)
-            })
-            .await?;
+            task::spawn_blocking(move || bincode::deserialize(&buffer))
+                .await
+                .map_err(|e| {
+                    crate::storage::error::StorageError::Io(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        e,
+                    ))
+                })?
+                .map_err(crate::storage::error::StorageError::Serialization)?;
 
-        // Load into engine
         engine.load_from_snapshot(state).await;
 
         tracing::info!(path = %path.display(), "Snapshot loaded");

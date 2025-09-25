@@ -26,7 +26,7 @@ impl PartialOrd for TtlEvent {
         Some(self.cmp(other))
     }
 }
-
+#[derive(Debug)]
 pub struct TtlManager {
     engine: Arc<StorageEngine>,
     queue: Arc<Mutex<BinaryHeap<TtlEvent>>>,

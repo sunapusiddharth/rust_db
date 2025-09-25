@@ -3,8 +3,9 @@ use std::collections::HashMap;
 
 use crate::storage::types::KvEntry;
 
+#[derive(Debug)]
 pub struct Shard {
-    map: RwLock<HashMap<String, KvEntry>>,
+    pub map: RwLock<HashMap<String, KvEntry>>,
 }
 
 impl Shard {

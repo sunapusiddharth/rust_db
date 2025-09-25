@@ -46,16 +46,20 @@ impl ConnectionInfo {
     }
 
     pub fn touch(&self) {
-        self.last_active
-            .store(Instant::now().elapsed().as_nanos(), Ordering::Relaxed);
+        let now_nanos = Instant::now().elapsed().as_nanos();
+        let clamped = std::cmp::min(now_nanos, u64::MAX as u128) as u64;
+        self.last_active.store(clamped, Ordering::Relaxed);
     }
 
     pub fn idle_time(&self) -> Duration {
         let now_nanos = Instant::now().elapsed().as_nanos();
-        let last_nanos = self.last_active.load(Ordering::Relaxed);
+        let last_nanos = self.last_active.load(Ordering::Relaxed) as u128;
+
         if last_nanos == 0 {
             return Duration::from_secs(0);
         }
-        Duration::from_nanos((now_nanos - last_nanos) as u64)
+
+        let delta = now_nanos.saturating_sub(last_nanos);
+        Duration::from_nanos(std::cmp::min(delta, u64::MAX as u128) as u64)
     }
 }

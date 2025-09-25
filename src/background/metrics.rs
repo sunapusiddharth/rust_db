@@ -50,16 +50,17 @@ impl MetricsWorker {
 
         let engine = self.engine.clone();
         let wal = self.wal.clone();
+        let interval_clone = self.interval.clone();
 
         let handle = tokio::spawn(async move {
+            tokio::pin!(rx); // Pin the receiver so it can be polled multiple times
+
             loop {
                 tokio::select! {
-                    _ = sleep(self.interval) => {
-                        // Update WAL size (approximate)
+                    _ = sleep(interval_clone) => {
                         let wal_offset = wal.current_offset().await;
                         WAL_SIZE.set(wal_offset as i64);
 
-                        // Update key count (sum across shards)
                         let key_count = engine
                             .shards
                             .iter()
@@ -67,10 +68,9 @@ impl MetricsWorker {
                             .sum::<usize>();
                         KEY_COUNT.set(key_count as i64);
 
-                        // Memory usage — placeholder (use jemalloc stats in prod)
-                        MEMORY_USAGE.set((key_count * 100) as i64); // rough estimate
+                        MEMORY_USAGE.set((key_count * 100) as i64);
                     }
-                    _ = rx => {
+                    _ = &mut rx => {
                         tracing::info!("Metrics worker shutting down");
                         break;
                     }

@@ -1,11 +1,13 @@
 use std::time::SystemTime;
 
+use serde::Deserialize;
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct KvEntry {
     pub value: Vec<u8>,
     pub version: u64,
-    pub created_at: u64,           // Unix nanos
-    pub expires_at: Option<u64>,   // Unix nanos, None = no expiry
+    pub created_at: u64,         // Unix nanos
+    pub expires_at: Option<u64>, // Unix nanos, None = no expiry
 }
 
 impl KvEntry {
@@ -38,7 +40,7 @@ impl KvEntry {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct StorageConfig {
     pub num_shards: usize,
     pub snapshot_dir: String,

@@ -4,12 +4,19 @@ use axum::http::request::Parts;
 use axum::RequestPartsExt;
 use std::net::SocketAddr;
 
-use crate::auth::AuthManager;
 use crate::auth::types::AuthContext;
+use crate::auth::AuthManager;
 
 #[derive(Clone)]
 pub struct AuthState {
     pub auth_manager: std::sync::Arc<AuthManager>,
+}
+
+// Implement FromRef<()> for AuthState to satisfy axum's extractor requirements
+impl axum::extract::FromRef<()> for AuthState {
+    fn from_ref(_: &()) -> AuthState {
+        panic!("AuthState cannot be extracted from unit type");
+    }
 }
 
 #[derive(Debug)]
@@ -23,10 +30,12 @@ where
     type Rejection = crate::api::error::ApiError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let State(auth_state) = parts
-            .extract_with_state::<State<AuthState>, _>(state)
-            .await
-            .map_err(|_| crate::api::error::ApiError::AuthError(crate::auth::types::AuthError::InvalidCredentials))?;
+        // Extract AuthState from the request parts
+        let State(auth_state) = parts.extract::<State<AuthState>>().await.map_err(|_| {
+            crate::api::error::ApiError::AuthError(
+                crate::auth::types::AuthError::InvalidCredentials,
+            )
+        })?;
 
         let headers = &parts.headers;
         let source_ip = parts

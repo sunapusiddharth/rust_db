@@ -25,20 +25,20 @@ struct WalFileHandle {
 }
 
 impl WalManager {
-    pub async fn new(config: WalConfig) -> Result<Self, WalError> {
+    pub async fn new(config: WalConfig) -> Result<Arc<Self>, WalError> {
         std::fs::create_dir_all(&config.dir)?;
 
         let current_file = Self::open_next_file(&config).await?;
 
-        let mut manager = Self {
+        let manager = Arc::new(Self {
             config: config.clone(),
             current_file: Mutex::new(current_file),
             sync_task: None,
-        };
+        });
 
         // Start background fsync task if needed
         if let SyncPolicy::EveryMs(interval_ms) = config.sync_policy {
-            let manager_clone = Arc::new(manager.clone());
+            let manager_clone = Arc::clone(&manager);
             let handle = tokio::spawn(async move {
                 let interval = Duration::from_millis(interval_ms);
                 loop {
@@ -48,7 +48,11 @@ impl WalManager {
                     }
                 }
             });
-            manager.sync_task = Some(handle);
+
+            // Use interior mutability to store the handle
+            Arc::get_mut(&mut Arc::clone(&manager))
+                .expect("No other Arc references exist")
+                .sync_task = Some(handle);
         }
 
         Ok(manager)
@@ -126,7 +130,7 @@ impl WalManager {
         start_offset: u64,
         mut callback: impl FnMut(u64, WalEntry) -> Result<(), WalError>,
     ) -> Result<(), WalError> {
-        let handle = self.current_file.lock().await;
+        let mut handle = self.current_file.lock().await;
 
         // Seek to start offset
         handle.file.seek(SeekFrom::Start(start_offset))?;

@@ -14,11 +14,7 @@ pub struct ReplicaStreamer {
 }
 
 impl ReplicaStreamer {
-    pub fn new(
-        engine: Arc<StorageEngine>,
-        bind_addr: String,
-        sync_mode: bool,
-    ) -> Self {
+    pub fn new(engine: Arc<StorageEngine>, bind_addr: String, sync_mode: bool) -> Self {
         Self {
             engine,
             bind_addr,
@@ -27,7 +23,9 @@ impl ReplicaStreamer {
         }
     }
 
-    pub async fn start(&mut self) -> Result<tokio::task::JoinHandle<()>, crate::background::types::WorkerError> {
+    pub async fn start(
+        &mut self,
+    ) -> Result<tokio::task::JoinHandle<()>, crate::background::types::WorkerError> {
         let (tx, rx) = oneshot::channel();
         self.shutdown_tx = Some(tx);
 
@@ -36,9 +34,14 @@ impl ReplicaStreamer {
         let sync_mode = self.sync_mode;
 
         let handle = tokio::spawn(async move {
-            let listener = TcpListener::bind(&bind_addr).await
-                .map_err(|e| crate::background::types::WorkerError::Io(e))?;
-
+            let listener = match TcpListener::bind(&bind_addr).await {
+                Ok(l) => l,
+                Err(e) => {
+                    tracing::error!("Failed to bind to {}: {}", bind_addr, e);
+                    return;
+                }
+            };
+            tokio::pin!(rx); // pin the receiver for select!
             tracing::info!("Replica streamer listening on {}", bind_addr);
 
             loop {
@@ -47,9 +50,9 @@ impl ReplicaStreamer {
                         match accept_result {
                             Ok((stream, addr)) => {
                                 tracing::info!("Replica connection from {}", addr);
-                                
+
                                 let engine = engine.clone();
-                                
+
                                 tokio::spawn(async move {
                                     handle_replica_connection(stream, engine, sync_mode).await;
                                 });
@@ -59,7 +62,7 @@ impl ReplicaStreamer {
                             }
                         }
                     }
-                    _ = rx => {
+                    _ = &mut rx => {
                         tracing::info!("Replica streamer shutting down");
                         break;
                     }
@@ -103,14 +106,21 @@ async fn handle_replica_connection(
 
         // Process complete WAL entries
         while pos < buffer.len() {
-            if buffer.len() - pos < 8 { // min header size
+            if buffer.len() - pos < 8 {
+                // min header size
                 break;
             }
 
             // Read entry size (first 8 bytes)
             let entry_size = u64::from_le_bytes([
-                buffer[pos], buffer[pos + 1], buffer[pos + 2], buffer[pos + 3],
-                buffer[pos + 4], buffer[pos + 5], buffer[pos + 6], buffer[pos + 7],
+                buffer[pos],
+                buffer[pos + 1],
+                buffer[pos + 2],
+                buffer[pos + 3],
+                buffer[pos + 4],
+                buffer[pos + 5],
+                buffer[pos + 6],
+                buffer[pos + 7],
             ]) as usize;
 
             if buffer.len() - pos < 8 + entry_size {
